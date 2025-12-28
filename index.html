@@ -25,6 +25,12 @@ canvas { position:fixed; top:0; left:0; width:100vw; height:100vh; }
   <div id="userList">Authorized users: None</div>
 </div>
 <script>
+  <!-- Load face-api.js library first -->
+<script defer src="https://unpkg.com/face-api.js"></script>
+
+<!-- Then your custom script -->
+<script defer src="js/script.js"></script>
+
 const video = document.getElementById("video");
 const overlay = document.getElementById("overlay");
 const alertScreen = document.getElementById("alertScreen");

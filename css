@@ -1,0 +1,33 @@
+body { margin: 0; overflow: hidden; background: black; font-family: Arial, sans-serif; }
+video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; }
+
+#alertScreen {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: red;
+  color: white;
+  font-size: 4rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+#registerBtn {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  z-index: 20;
+}
+
+#status {
+  position: fixed;
+  top: 60px;
+  left: 10px;
+  color: white;
+  font-size: 1.2rem;
+  z-index: 20;
+}

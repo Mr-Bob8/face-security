@@ -43,6 +43,7 @@
 <button id="registerBtn" disabled>Register Face</button>
 <div id="status">Loading face detection models...</div>
 
+<!-- Load face-api.js from CDN -->
 <script defer src="https://unpkg.com/face-api.js"></script>
 <script>
 const video = document.getElementById("video");
@@ -54,7 +55,7 @@ const TIMEOUT = 5000; // 5 seconds
 let lastSeen = Date.now();
 let authorizedDescriptor = null;
 
-// Load face-api.js models from a working CDN
+// Load models from working CDN
 async function loadModels() {
   const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
   status.textContent = "Loading face detection models...";
@@ -65,13 +66,13 @@ async function loadModels() {
   startVideo();
 }
 
-// Start webcam and wait for video to play
+// Start webcam
 function startVideo() {
   navigator.mediaDevices.getUserMedia({ video: true })
     .then(stream => {
       video.srcObject = stream;
       video.addEventListener("play", () => {
-        registerBtn.disabled = false; // Enable button when video is ready
+        registerBtn.disabled = false; // enable button once video is playing
         status.textContent = "Camera ready. Click 'Register Face' to save your face.";
         loadAuthorizedFace();
         startDetectionLoop();
@@ -80,7 +81,7 @@ function startVideo() {
     .catch(err => status.textContent = "Camera error: " + err);
 }
 
-// Load authorized face from localStorage
+// Load saved face from localStorage
 function loadAuthorizedFace() {
   const data = localStorage.getItem("authorizedFace");
   if (data) {
@@ -96,7 +97,7 @@ function saveAuthorizedFace(descriptor) {
   status.textContent = "Face registered successfully!";
 }
 
-// Register button functionality
+// Register button
 registerBtn.addEventListener("click", async () => {
   status.textContent = "Detecting face for registration...";
   const detection = await faceapi
@@ -111,7 +112,7 @@ registerBtn.addEventListener("click", async () => {
   saveAuthorizedFace(detection.descriptor);
 });
 
-// Detection loop to check face continuously
+// Face detection loop
 function startDetectionLoop() {
   setInterval(async () => {
     if (!authorizedDescriptor) return;

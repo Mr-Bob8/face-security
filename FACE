@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Face Security</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: black; }
+    video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; }
+    #alertScreen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: red;
+      color: white;
+      font-size: 4rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+      font-family: Arial, sans-serif;
+    }
+    #registerBtn {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      z-index: 20;
+    }
+  </style>
+</head>
+<body>
+
+<video id="video" autoplay muted></video>
+<div id="alertScreen">⚠ USER NOT FOUND</div>
+<button id="registerBtn">Register Face</button>
+
+<script defer src="https://unpkg.com/face-api.js"></script>
+<script>
+const video = document.getElementById("video");
+const alertScreen = document.getElementById("alertScreen");
+const registerBtn = document.getElementById("registerBtn");
+
+const TIMEOUT = 5000; // 5 seconds
+let lastSeen = Date.now();
+let authorizedDescriptor = null;
+
+// Load models
+Promise.all([
+  faceapi.nets.tinyFaceDetector.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models"),
+  faceapi.nets.faceLandmark68Net.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models"),
+  faceapi.nets.faceRecognitionNet.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models")
+]).then(startVideo);
+
+// Start webcam
+function startVideo() {
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => video.srcObject = stream)
+    .catch(err => alert("Camera error: " + err));
+}
+
+// Load saved face from localStorage
+function loadAuthorizedFace() {
+  const data = localStorage.getItem("authorizedFace");
+  if (data) {
+    authorizedDescriptor = new Float32Array(JSON.parse(data));
+    console.log("Authorized face loaded.");
+  }
+}
+
+// Save face to localStorage
+function saveAuthorizedFace(descriptor) {
+  localStorage.setItem("authorizedFace", JSON.stringify(Array.from(descriptor)));
+  authorizedDescriptor = descriptor;
+  alert("Authorized face saved!");
+}
+
+// Register button
+registerBtn.addEventListener("click", async () => {
+  const detection = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+
+  if (!detection) {
+    alert("No face detected. Try again.");
+    return;
+  }
+  saveAuthorizedFace(detection.descriptor);
+});
+
+// Face detection loop
+video.addEventListener("play", () => {
+  loadAuthorizedFace();
+
+  setInterval(async () => {
+    if (!authorizedDescriptor) return; // no authorized face yet
+
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (detection) {
+      const faceMatcher = new faceapi.FaceMatcher(
+        new faceapi.LabeledFaceDescriptors("Authorized", [authorizedDescriptor]), 
+        0.5
+      );
+      const match = faceMatcher.findBestMatch(detection.descriptor);
+
+      if (match.label === "Authorized") {
+        lastSeen = Date.now();
+        alertScreen.style.display = "none";
+      }
+    }
+
+    if (Date.now() - lastSeen > TIMEOUT) {
+      alertScreen.style.display = "flex";
+    }
+  }, 200);
+});
+</script>
+
+</body>
+</html>

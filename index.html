@@ -41,7 +41,7 @@
 <video id="video" autoplay muted></video>
 <div id="alertScreen">⚠ USER NOT FOUND</div>
 <button id="registerBtn" disabled>Register Face</button>
-<div id="status">Loading models...</div>
+<div id="status">Loading face detection models...</div>
 
 <script defer src="https://unpkg.com/face-api.js"></script>
 <script>
@@ -54,12 +54,13 @@ const TIMEOUT = 5000; // 5 seconds
 let lastSeen = Date.now();
 let authorizedDescriptor = null;
 
-// Load face-api models
+// Load models from working CDN
 async function loadModels() {
   status.textContent = "Loading face detection models...";
-  await faceapi.nets.tinyFaceDetector.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models");
-  await faceapi.nets.faceLandmark68Net.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models");
-  await faceapi.nets.faceRecognitionNet.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models");
+  const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
   status.textContent = "Models loaded! Starting camera...";
   startVideo();
 }
@@ -150,3 +151,4 @@ loadModels();
 
 </body>
 </html>
+

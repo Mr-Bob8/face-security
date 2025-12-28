@@ -1,17 +1,156 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Face Security</title>
-  <link rel="stylesheet" href="style.css">
-  <!-- Load face-api.js from CDN -->
-  <script defer src="https://unpkg.com/face-api.js"></script>
-  <script defer src="script.js"></script>
+<meta charset="UTF-8">
+<title>Face Security</title>
+<style>
+body { margin:0; overflow:hidden; background:black; font-family:Arial,sans-serif; }
+video { position:fixed; top:0; left:0; width:100vw; height:100vh; object-fit:cover; }
+canvas { position:fixed; top:0; left:0; width:100vw; height:100vh; }
+#alertScreen { display:none; position:fixed; inset:0; background:red; color:white; font-size:4rem; display:flex; justify-content:center; align-items:center; z-index:10; }
+#registerContainer { position:fixed; top:10px; left:10px; z-index:20; display:flex; flex-direction:column; gap:5px; }
+#registerBtn { padding:10px 20px; font-size:1rem; }
+#status { color:white; font-size:1.2rem; }
+#userList { color:white; font-size:0.9rem; }
+</style>
+<script defer src="https://unpkg.com/face-api.js"></script>
 </head>
 <body>
-  <video id="video" autoplay muted></video>
-  <div id="alertScreen">⚠ USER NOT FOUND</div>
+<video id="video" autoplay muted></video>
+<canvas id="overlay"></canvas>
+<div id="alertScreen">⚠ USER NOT FOUND</div>
+<div id="registerContainer">
   <button id="registerBtn" disabled>Register Face</button>
   <div id="status">Loading face detection models...</div>
+  <div id="userList">Authorized users: None</div>
+</div>
+<script>
+const video = document.getElementById("video");
+const overlay = document.getElementById("overlay");
+const alertScreen = document.getElementById("alertScreen");
+const registerBtn = document.getElementById("registerBtn");
+const status = document.getElementById("status");
+const userList = document.getElementById("userList");
+const canvas = overlay.getContext("2d");
+
+const TIMEOUT = 5000; // 5 seconds without recognized face triggers alert
+let lastSeen = Date.now();
+let authorizedUsers = []; // array of {name, descriptor}
+
+// Load models
+async function loadModels() {
+    const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
+    try {
+        status.textContent = "Loading face detection models...";
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        status.textContent = "Models loaded! Starting camera...";
+        startVideo();
+    } catch(err){
+        console.error(err);
+        status.textContent = "Failed to load models! Check console.";
+    }
+}
+
+// Start camera
+function startVideo() {
+    navigator.mediaDevices.getUserMedia({video:true})
+    .then(stream => {
+        video.srcObject = stream;
+        video.addEventListener("play", () => {
+            registerBtn.disabled = false;
+            status.textContent = "Camera ready. Click 'Register Face' to save your face.";
+            loadAuthorizedUsers();
+            startDetectionLoop();
+        });
+    })
+    .catch(err => status.textContent = "Camera error: "+err);
+}
+
+// Load users from localStorage
+function loadAuthorizedUsers() {
+    const data = localStorage.getItem("authorizedUsers");
+    if(data){
+        const savedUsers = JSON.parse(data);
+        authorizedUsers = savedUsers.map(u => ({name: u.name, descriptor: new Float32Array(u.descriptor)}));
+        updateUserList();
+        status.textContent = "Authorized users loaded!";
+    }
+}
+
+// Save users to localStorage
+function saveAuthorizedUsers() {
+    const saveData = authorizedUsers.map(u => ({name:u.name, descriptor:Array.from(u.descriptor)}));
+    localStorage.setItem("authorizedUsers", JSON.stringify(saveData));
+}
+
+// Update displayed list of users
+function updateUserList() {
+    if(authorizedUsers.length===0){ userList.textContent="Authorized users: None"; return; }
+    userList.textContent = "Authorized users: " + authorizedUsers.map(u=>u.name).join(", ");
+}
+
+// Register new face
+registerBtn.addEventListener("click", async()=>{
+    let userName = prompt("Enter your name for this face:");
+    if(!userName) return;
+    status.textContent="Detecting face for registration...";
+    const detection = await faceapi.detectSingleFace(video,new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+    if(!detection){ status.textContent="No face detected. Try again."; return; }
+    authorizedUsers.push({name:userName, descriptor:detection.descriptor});
+    saveAuthorizedUsers();
+    updateUserList();
+    status.textContent=`Face registered for ${userName}!`;
+});
+
+// Detection loop
+async function startDetectionLoop() {
+    const displaySize = { width: video.videoWidth, height: video.videoHeight };
+    faceapi.matchDimensions(overlay, displaySize);
+
+    setInterval(async()=>{
+        if(authorizedUsers.length===0) return;
+
+        const detections = await faceapi.detectAllFaces(video,new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
+        canvas.clearRect(0,0,overlay.width,overlay.height);
+
+        let recognized = false;
+
+        detections.forEach(det=>{
+            const resized = faceapi.resizeResults(det, displaySize);
+            const box = resized.detection.box;
+            canvas.strokeStyle="lime";
+            canvas.lineWidth=2;
+            canvas.strokeRect(box.x,box.y,box.width,box.height);
+
+            const faceMatcher = new faceapi.FaceMatcher(
+                authorizedUsers.map(u=>new faceapi.LabeledFaceDescriptors(u.name,[u.descriptor])), 0.5
+            );
+            const bestMatch = faceMatcher.findBestMatch(det.descriptor);
+            canvas.fillStyle="lime";
+            canvas.font="16px Arial";
+            canvas.fillText(bestMatch.toString(), box.x, box.y-10);
+
+            if(bestMatch.label !== "unknown") recognized = true;
+        });
+
+        if(recognized){
+            lastSeen = Date.now();
+            alertScreen.style.display="none";
+            status.textContent="Face recognized: Access granted";
+        } else {
+            status.textContent = detections.length===0 ? "No face detected" : "Face not recognized";
+        }
+
+        if(Date.now()-lastSeen>TIMEOUT){
+            alertScreen.style.display="flex";
+        }
+
+    },300);
+}
+
+window.addEventListener('load', loadModels);
+</script>
 </body>
 </html>

@@ -40,7 +40,7 @@
 
 <video id="video" autoplay muted></video>
 <div id="alertScreen">⚠ USER NOT FOUND</div>
-<button id="registerBtn">Register Face</button>
+<button id="registerBtn" disabled>Register Face</button>
 <div id="status">Loading models...</div>
 
 <script defer src="https://unpkg.com/face-api.js"></script>
@@ -67,7 +67,15 @@ async function loadModels() {
 // Start webcam
 function startVideo() {
   navigator.mediaDevices.getUserMedia({ video: true })
-    .then(stream => video.srcObject = stream)
+    .then(stream => {
+      video.srcObject = stream;
+      video.addEventListener("play", () => {
+        registerBtn.disabled = false; // enable button once video is playing
+        status.textContent = "Camera ready. Click 'Register Face' to save your face.";
+        loadAuthorizedFace();
+        startDetectionLoop();
+      });
+    })
     .catch(err => status.textContent = "Camera error: " + err);
 }
 
@@ -103,9 +111,7 @@ registerBtn.addEventListener("click", async () => {
 });
 
 // Face detection loop
-video.addEventListener("play", () => {
-  loadAuthorizedFace();
-
+function startDetectionLoop() {
   setInterval(async () => {
     if (!authorizedDescriptor) return;
 
@@ -136,7 +142,7 @@ video.addEventListener("play", () => {
       alertScreen.style.display = "flex";
     }
   }, 300);
-});
+}
 
 // Start everything
 loadModels();

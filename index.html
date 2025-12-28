@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>Face Security</title>
   <style>
-    body { margin: 0; overflow: hidden; background: black; }
+    body { margin: 0; overflow: hidden; background: black; font-family: Arial, sans-serif; }
     video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; }
     #alertScreen {
       display: none;
@@ -17,7 +17,6 @@
       justify-content: center;
       align-items: center;
       z-index: 10;
-      font-family: Arial, sans-serif;
     }
     #registerBtn {
       position: fixed;
@@ -27,6 +26,14 @@
       font-size: 1rem;
       z-index: 20;
     }
+    #status {
+      position: fixed;
+      top: 60px;
+      left: 10px;
+      color: white;
+      font-size: 1.2rem;
+      z-index: 20;
+    }
   </style>
 </head>
 <body>
@@ -34,29 +41,34 @@
 <video id="video" autoplay muted></video>
 <div id="alertScreen">⚠ USER NOT FOUND</div>
 <button id="registerBtn">Register Face</button>
+<div id="status">Loading models...</div>
 
 <script defer src="https://unpkg.com/face-api.js"></script>
 <script>
 const video = document.getElementById("video");
 const alertScreen = document.getElementById("alertScreen");
 const registerBtn = document.getElementById("registerBtn");
+const status = document.getElementById("status");
 
 const TIMEOUT = 5000; // 5 seconds
 let lastSeen = Date.now();
 let authorizedDescriptor = null;
 
-// Load models
-Promise.all([
-  faceapi.nets.tinyFaceDetector.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models"),
-  faceapi.nets.faceLandmark68Net.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models"),
-  faceapi.nets.faceRecognitionNet.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models")
-]).then(startVideo);
+// Load face-api models
+async function loadModels() {
+  status.textContent = "Loading face detection models...";
+  await faceapi.nets.tinyFaceDetector.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models");
+  await faceapi.nets.faceLandmark68Net.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models");
+  await faceapi.nets.faceRecognitionNet.loadFromUri("https://cdn.jsdelivr.net/npm/face-api.js/models");
+  status.textContent = "Models loaded! Starting camera...";
+  startVideo();
+}
 
 // Start webcam
 function startVideo() {
   navigator.mediaDevices.getUserMedia({ video: true })
     .then(stream => video.srcObject = stream)
-    .catch(err => alert("Camera error: " + err));
+    .catch(err => status.textContent = "Camera error: " + err);
 }
 
 // Load saved face from localStorage
@@ -64,7 +76,7 @@ function loadAuthorizedFace() {
   const data = localStorage.getItem("authorizedFace");
   if (data) {
     authorizedDescriptor = new Float32Array(JSON.parse(data));
-    console.log("Authorized face loaded.");
+    status.textContent = "Authorized face loaded!";
   }
 }
 
@@ -72,18 +84,19 @@ function loadAuthorizedFace() {
 function saveAuthorizedFace(descriptor) {
   localStorage.setItem("authorizedFace", JSON.stringify(Array.from(descriptor)));
   authorizedDescriptor = descriptor;
-  alert("Authorized face saved!");
+  status.textContent = "Face registered successfully!";
 }
 
 // Register button
 registerBtn.addEventListener("click", async () => {
+  status.textContent = "Detecting face for registration...";
   const detection = await faceapi
     .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
     .withFaceLandmarks()
     .withFaceDescriptor();
 
   if (!detection) {
-    alert("No face detected. Try again.");
+    status.textContent = "No face detected. Try again.";
     return;
   }
   saveAuthorizedFace(detection.descriptor);
@@ -94,7 +107,7 @@ video.addEventListener("play", () => {
   loadAuthorizedFace();
 
   setInterval(async () => {
-    if (!authorizedDescriptor) return; // no authorized face yet
+    if (!authorizedDescriptor) return;
 
     const detection = await faceapi
       .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
@@ -111,14 +124,22 @@ video.addEventListener("play", () => {
       if (match.label === "Authorized") {
         lastSeen = Date.now();
         alertScreen.style.display = "none";
+        status.textContent = "Face recognized: Access granted";
+      } else {
+        status.textContent = "Face not recognized";
       }
+    } else {
+      status.textContent = "No face detected";
     }
 
     if (Date.now() - lastSeen > TIMEOUT) {
       alertScreen.style.display = "flex";
     }
-  }, 200);
+  }, 300);
 });
+
+// Start everything
+loadModels();
 </script>
 
 </body>

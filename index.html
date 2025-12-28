@@ -1,11 +1,153 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Face Security</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: black; font-family: Arial, sans-serif; }
+    video { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; }
+    #alertScreen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: red;
+      color: white;
+      font-size: 4rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+    }
+    #registerBtn {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      padding: 10px 20px;
+      font-size: 1rem;
+      z-index: 20;
+    }
+    #status {
+      position: fixed;
+      top: 60px;
+      left: 10px;
+      color: white;
+      font-size: 1.2rem;
+      z-index: 20;
+    }
+  </style>
+</head>
 <body>
-<video id="video" autoplay></video>
+
+<video id="video" autoplay muted></video>
+<div id="alertScreen">⚠ USER NOT FOUND</div>
+<button id="registerBtn" disabled>Register Face</button>
+<div id="status">Loading face detection models...</div>
+
+<script defer src="https://unpkg.com/face-api.js"></script>
 <script>
-navigator.mediaDevices.getUserMedia({ video: true })
-  .then(stream => document.getElementById('video').srcObject = stream)
-  .catch(err => alert('Camera error: ' + err));
+const video = document.getElementById("video");
+const alertScreen = document.getElementById("alertScreen");
+const registerBtn = document.getElementById("registerBtn");
+const status = document.getElementById("status");
+
+const TIMEOUT = 5000; // 5 seconds
+let lastSeen = Date.now();
+let authorizedDescriptor = null;
+
+// Load face-api.js models from a working CDN
+async function loadModels() {
+  const MODEL_URL = "https://justadudewhohacks.github.io/face-api.js/models";
+  status.textContent = "Loading face detection models...";
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  status.textContent = "Models loaded! Starting camera...";
+  startVideo();
+}
+
+// Start webcam and wait for video to play
+function startVideo() {
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+      video.srcObject = stream;
+      video.addEventListener("play", () => {
+        registerBtn.disabled = false; // Enable button when video is ready
+        status.textContent = "Camera ready. Click 'Register Face' to save your face.";
+        loadAuthorizedFace();
+        startDetectionLoop();
+      });
+    })
+    .catch(err => status.textContent = "Camera error: " + err);
+}
+
+// Load authorized face from localStorage
+function loadAuthorizedFace() {
+  const data = localStorage.getItem("authorizedFace");
+  if (data) {
+    authorizedDescriptor = new Float32Array(JSON.parse(data));
+    status.textContent = "Authorized face loaded!";
+  }
+}
+
+// Save face descriptor to localStorage
+function saveAuthorizedFace(descriptor) {
+  localStorage.setItem("authorizedFace", JSON.stringify(Array.from(descriptor)));
+  authorizedDescriptor = descriptor;
+  status.textContent = "Face registered successfully!";
+}
+
+// Register button functionality
+registerBtn.addEventListener("click", async () => {
+  status.textContent = "Detecting face for registration...";
+  const detection = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+
+  if (!detection) {
+    status.textContent = "No face detected. Try again.";
+    return;
+  }
+  saveAuthorizedFace(detection.descriptor);
+});
+
+// Detection loop to check face continuously
+function startDetectionLoop() {
+  setInterval(async () => {
+    if (!authorizedDescriptor) return;
+
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .withFaceLandmarks()
+      .withFaceDescriptor();
+
+    if (detection) {
+      const faceMatcher = new faceapi.FaceMatcher(
+        new faceapi.LabeledFaceDescriptors("Authorized", [authorizedDescriptor]), 
+        0.5
+      );
+      const match = faceMatcher.findBestMatch(detection.descriptor);
+
+      if (match.label === "Authorized") {
+        lastSeen = Date.now();
+        alertScreen.style.display = "none";
+        status.textContent = "Face recognized: Access granted";
+      } else {
+        status.textContent = "Face not recognized";
+      }
+    } else {
+      status.textContent = "No face detected";
+    }
+
+    if (Date.now() - lastSeen > TIMEOUT) {
+      alertScreen.style.display = "flex";
+    }
+  }, 300);
+}
+
+// Start everything
+loadModels();
 </script>
+
 </body>
 </html>
